@@ -85,16 +85,10 @@
       cursor: pointer;
     }
     .settings { display: grid; grid-template-columns: 1.4fr .8fr; gap: 12px; align-content: start; }
-    .voicing-control { display: grid; gap: 8px; }
-    .control-label { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
-    .stepper { display: grid; grid-template-columns: 42px 1fr 42px; gap: 6px; }
-    .stepper button { padding: 10px 6px; cursor: pointer; }
-    #voicingName { display: grid; place-items: center; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+    .voicing-control { display: grid; gap: 12px; }
     .download { grid-column: 1 / -1; width: 100%; margin-top: 2px; cursor: pointer; }
-    .sound-options { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
-    .sound-options summary { width: max-content; cursor: pointer; user-select: none; }
-    .sound-options label { margin-top: 10px; }
-    .sound-options select { padding: 9px 12px; }
+    .waveform-control { margin-top: 4px; }
+    .waveform-control select { padding: 9px 12px; }
     button:hover, select:hover { border-color: var(--accent); }
     button:active { transform: translateY(1px); }
     .hint { grid-column: 1 / -1; margin: -8px 0 0; color: var(--muted); font-size: 11px; text-align: center; }
@@ -139,12 +133,45 @@
       </div>
       <div class="settings">
         <div class="voicing-control">
-          <span class="control-label">Voicing</span>
-          <div class="stepper">
-            <button id="voicingPrev" type="button" aria-label="Previous voicing">↓</button>
-            <span id="voicingName">Original</span>
-            <button id="voicingNext" type="button" aria-label="Next voicing">↑</button>
-          </div>
+          <label>Voicing
+            <select id="voicing">
+              <option value="original">Original</option>
+              <optgroup label="Inversions">
+                <option value="first">1st inversion</option>
+                <option value="second">2nd inversion</option>
+                <option value="third">3rd inversion</option>
+              </optgroup>
+              <optgroup label="Spacing">
+                <option value="close">Close</option>
+                <option value="open">Open</option>
+                <option value="wide">Wide</option>
+                <option value="spread">Spread</option>
+                <option value="cluster">Cluster</option>
+                <option value="drop2">Drop 2</option>
+                <option value="drop3">Drop 3</option>
+              </optgroup>
+              <optgroup label="Reduced and doubled">
+                <option value="rootless">Rootless</option>
+                <option value="shell">Shell</option>
+                <option value="no5">No fifth</option>
+                <option value="doubleRoot">Root doubled</option>
+                <option value="pedal">Bass pedal</option>
+              </optgroup>
+              <optgroup label="Alternative">
+                <option value="quartal">Quartal</option>
+              </optgroup>
+            </select>
+          </label>
+          <label class="waveform-control">Waveform
+            <select id="waveform">
+              <option value="sine">Sine</option>
+              <option value="harmonic">Harmonic</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="supersaw">Supersaw</option>
+            </select>
+          </label>
         </div>
         <label>Octave
           <select id="octave">
@@ -154,17 +181,6 @@
           </select>
         </label>
         <button id="download" class="download">↓ Download WAV</button>
-        <details class="sound-options">
-          <summary>Sound options</summary>
-          <label>Waveform
-            <select id="waveform">
-              <option value="sine">Sine</option>
-              <option value="triangle">Triangle</option>
-              <option value="square">Square</option>
-              <option value="sawtooth">Sawtooth</option>
-            </select>
-          </label>
-        </details>
       </div>
       <p class="hint">Click a chord to play · Click it again to stop · Space bar toggles playback</p>
     </section>
@@ -179,17 +195,9 @@
     const $ = id => document.getElementById(id);
     const els = {
       set: $("setSelect"), pads: $("pads"), octave: $("octave"), waveform: $("waveform"),
-      voicingPrev: $("voicingPrev"), voicingNext: $("voicingNext"), voicingName: $("voicingName"),
+      voicing: $("voicing"),
       symbol: $("symbol"), notes: $("notes"), play: $("play"), download: $("download")
     };
-    const VOICINGS = [
-      { value: "original", label: "Original" },
-      { value: "close", label: "Close" },
-      { value: "open", label: "Open" },
-      { value: "drop2", label: "Drop 2" },
-      { value: "wide", label: "Wide" }
-    ];
-    let voicingIndex = 0;
     let selectedChord = 0;
     let liveContext;
     let activeVoice = null;
@@ -216,32 +224,76 @@
 
     function applyVoicing(source) {
       const notes = [...source].sort((a, b) => a - b);
-      const mode = VOICINGS[voicingIndex].value;
+      const mode = els.voicing.value;
       if (mode === "original") return source;
 
       const pitchClasses = [...new Set(notes.map(note => ((note % 12) + 12) % 12))];
+      const close = applyClose(notes);
+      const root = chordRootPitchClass();
+      const interval = note => (((note % 12) + 12) % 12 - root + 12) % 12;
+
+      if (["first", "second", "third"].includes(mode)) {
+        const result = [...close];
+        const rotations = { first: 1, second: 2, third: 3 }[mode];
+        for (let i = 0; i < Math.min(rotations, result.length - 1); i++) {
+          result.push(result.shift() + 12);
+        }
+        return result;
+      }
       if (mode === "close") {
-        const lowest = notes[0];
-        return pitchClasses.map(pc => {
-          let note = Math.floor(lowest / 12) * 12 + pc;
-          while (note < lowest) note += 12;
-          return note;
-        }).sort((a, b) => a - b);
+        return close;
       }
       if (mode === "open") {
-        const close = applyClose(notes);
         return close.map((note, i) => i > 0 && i % 2 ? note + 12 : note).sort((a, b) => a - b);
       }
-      if (mode === "drop2") {
-        if (notes.length < 3) return notes;
-        notes[notes.length - 2] -= 12;
-        return notes.sort((a, b) => a - b);
+      if (mode === "drop2" || mode === "drop3") {
+        const result = [...close];
+        const fromTop = mode === "drop2" ? 2 : 3;
+        if (result.length < fromTop) return result;
+        result[result.length - fromTop] -= 12;
+        return result.sort((a, b) => a - b);
       }
       if (mode === "wide") {
-        const close = applyClose(notes);
         return close.map((note, i) => note + Math.floor((i + 1) / 2) * 12).sort((a, b) => a - b);
       }
+      if (mode === "spread") {
+        return close.map((note, i) => note + i * 12);
+      }
+      if (mode === "cluster") {
+        return tightestCluster(pitchClasses, notes[0]);
+      }
+      if (mode === "rootless") {
+        const result = close.filter(note => interval(note) !== 0);
+        return result.length > 1 ? result : close;
+      }
+      if (mode === "shell") {
+        const result = close.filter(note => [0, 3, 4, 10, 11].includes(interval(note)));
+        return result.length > 1 ? result : close.slice(0, Math.min(3, close.length));
+      }
+      if (mode === "no5") {
+        const result = close.filter(note => interval(note) !== 7);
+        return result.length > 1 ? result : close;
+      }
+      if (mode === "doubleRoot") {
+        let topRoot = Math.floor(close.at(-1) / 12) * 12 + root;
+        while (topRoot <= close.at(-1)) topRoot += 12;
+        return [...close, topRoot];
+      }
+      if (mode === "pedal") {
+        const bass = notes[0] - 12;
+        return [bass, ...close.filter(note => note !== bass)];
+      }
+      if (mode === "quartal") {
+        return quartalOrder(pitchClasses, notes[0]);
+      }
       return notes;
+    }
+
+    function chordRootPitchClass() {
+      const match = /^([A-Ga-g])(#|b)?/.exec(currentChord().name);
+      if (!match) return ((noteToMidi(currentChord().notes.at(-1)) % 12) + 12) % 12;
+      const key = match[1].toUpperCase() + (match[2] === "b" ? "B" : match[2] || "");
+      return NOTE_INDEX[key];
     }
 
     function applyClose(notes) {
@@ -253,6 +305,45 @@
         while (note < lowest) note += 12;
         return note;
       }).sort((a, b) => a - b);
+    }
+
+    function tightestCluster(pitchClasses, anchor) {
+      const pcs = [...pitchClasses].sort((a, b) => a - b);
+      let best = null;
+      for (let rotation = 0; rotation < pcs.length; rotation++) {
+        const rotated = [...pcs.slice(rotation), ...pcs.slice(0, rotation).map(pc => pc + 12)];
+        const span = rotated.at(-1) - rotated[0];
+        if (!best || span < best.span) best = { values: rotated, span };
+      }
+      const offset = Math.floor(anchor / 12) * 12;
+      let result = best.values.map(value => offset + value);
+      while (result[0] < anchor - 6) result = result.map(note => note + 12);
+      while (result[0] > anchor + 6) result = result.map(note => note - 12);
+      return result;
+    }
+
+    function quartalOrder(pitchClasses, anchor) {
+      const remaining = [...pitchClasses];
+      const startIndex = remaining.indexOf(chordRootPitchClass());
+      const ordered = [remaining.splice(startIndex >= 0 ? startIndex : 0, 1)[0]];
+      while (remaining.length) {
+        const last = ordered.at(-1);
+        let bestIndex = 0;
+        let bestDistance = Infinity;
+        remaining.forEach((pc, index) => {
+          let candidate = pc;
+          while (candidate <= last) candidate += 12;
+          const distance = Math.abs(candidate - last - 5);
+          if (distance < bestDistance) { bestDistance = distance; bestIndex = index; }
+        });
+        let next = remaining.splice(bestIndex, 1)[0];
+        while (next <= ordered.at(-1)) next += 12;
+        ordered.push(next);
+      }
+      const offset = Math.floor(anchor / 12) * 12;
+      let result = ordered.map(note => offset + note);
+      while (result[0] < anchor) result = result.map(note => note + 12);
+      return result;
     }
 
     function midiNotes() {
@@ -288,7 +379,6 @@
     }
 
     function updateReadout() {
-      els.voicingName.textContent = VOICINGS[voicingIndex].label;
       els.symbol.textContent = currentChord().name;
       els.notes.textContent = midiNotes().map(midiName).join("  ·  ");
     }
@@ -298,26 +388,52 @@
       updateReadout();
     }
 
+    function oscillatorLayers() {
+      if (els.waveform.value === "harmonic") {
+        return [
+          { type: "sine", multiple: 1, level: 1 },
+          { type: "sine", multiple: 2, level: .3 },
+          { type: "sine", multiple: 3, level: .15 }
+        ];
+      }
+      if (els.waveform.value === "supersaw") {
+        return [-18, -12, -6, 0, 6, 12, 18].map(detune =>
+          ({ type: "sawtooth", multiple: 1, detune, level: 1 })
+        );
+      }
+      return [{ type: els.waveform.value, multiple: 1, detune: 0, level: 1 }];
+    }
+
+    function createVoice(context, destination, midi, start) {
+      const fundamental = 440 * 2 ** ((midi - 69) / 12);
+      const layers = oscillatorLayers();
+      const totalLevel = layers.reduce((sum, layer) => sum + layer.level, 0);
+      return layers.map(layer => {
+        const oscillator = context.createOscillator();
+        const layerGain = context.createGain();
+        oscillator.type = layer.type;
+        oscillator.frequency.value = fundamental * layer.multiple;
+        oscillator.detune.value = layer.detune || 0;
+        layerGain.gain.value = layer.level / totalLevel;
+        oscillator.connect(layerGain).connect(destination);
+        oscillator.start(start);
+        return oscillator;
+      });
+    }
+
     function buildChord(context, destination, start = 0) {
       const duration = 2.5;
       const attack = .025;
       const notes = midiNotes();
       const master = context.createGain();
-      master.gain.value = .72 / notes.length;
+      master.gain.setValueAtTime(.0001, start);
+      master.gain.exponentialRampToValueAtTime(.72 / notes.length, start + attack);
+      master.gain.setValueAtTime(.72 / notes.length, start + duration - .12);
+      master.gain.exponentialRampToValueAtTime(.0001, start + duration);
       master.connect(destination);
 
       notes.forEach(midi => {
-        const oscillator = context.createOscillator();
-        const envelope = context.createGain();
-        oscillator.type = els.waveform.value;
-        oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12);
-        envelope.gain.setValueAtTime(.0001, start);
-        envelope.gain.exponentialRampToValueAtTime(1, start + attack);
-        envelope.gain.setValueAtTime(1, start + duration - .12);
-        envelope.gain.exponentialRampToValueAtTime(.0001, start + duration);
-        oscillator.connect(envelope).connect(master);
-        oscillator.start(start);
-        oscillator.stop(start + duration);
+        createVoice(context, master, midi, start).forEach(oscillator => oscillator.stop(start + duration));
       });
     }
 
@@ -335,12 +451,7 @@
       master.connect(liveContext.destination);
 
       notes.forEach(midi => {
-        const oscillator = liveContext.createOscillator();
-        oscillator.type = els.waveform.value;
-        oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12);
-        oscillator.connect(master);
-        oscillator.start(now);
-        oscillators.push(oscillator);
+        oscillators.push(...createVoice(liveContext, master, midi, now));
       });
 
       activeVoice = { master, oscillators };
@@ -398,7 +509,7 @@
       const link = document.createElement("a");
       const safeName = currentChord().name.replaceAll("/", "-").replaceAll("#", "sharp");
       link.href = url;
-      link.download = `${safeName}-${VOICINGS[voicingIndex].value}.wav`;
+      link.download = `${safeName}-${els.voicing.value}.wav`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       els.download.disabled = false;
@@ -406,16 +517,14 @@
     }
 
     els.set.addEventListener("input", () => { stop(false); selectedChord = 0; update(); });
-    function changeVoicing(direction) {
+    function changeVoicing() {
       const wasPlaying = Boolean(activeVoice);
       if (wasPlaying) stop();
-      voicingIndex = (voicingIndex + direction + VOICINGS.length) % VOICINGS.length;
       updateReadout();
       if (wasPlaying) start();
     }
 
-    els.voicingPrev.addEventListener("click", () => changeVoicing(-1));
-    els.voicingNext.addEventListener("click", () => changeVoicing(1));
+    els.voicing.addEventListener("input", changeVoicing);
     els.octave.addEventListener("input", () => { stop(); updateReadout(); });
     els.waveform.addEventListener("input", () => {
       const wasPlaying = Boolean(activeVoice);
@@ -424,14 +533,13 @@
     els.play.addEventListener("click", togglePlayback);
     els.download.addEventListener("click", download);
     document.addEventListener("keydown", event => {
-      if (event.target.tagName !== "SELECT" && event.key === "ArrowDown") {
+      if (event.target.tagName !== "SELECT" && !event.repeat && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
         event.preventDefault();
-        changeVoicing(-1);
-        return;
-      }
-      if (event.target.tagName !== "SELECT" && event.key === "ArrowUp") {
-        event.preventDefault();
-        changeVoicing(1);
+        const options = [...els.voicing.options];
+        const direction = event.key === "ArrowUp" ? 1 : -1;
+        const nextIndex = (els.voicing.selectedIndex + direction + options.length) % options.length;
+        els.voicing.selectedIndex = nextIndex;
+        changeVoicing();
         return;
       }
       if (event.code === "Space" && !event.repeat && event.target.tagName !== "SELECT") {
