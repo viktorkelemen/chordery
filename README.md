@@ -1,6 +1,6 @@
-# Chord Garden
+# Chordery
 
-A browser-based chord explorer with playable chord collections, alternate voicings, octave controls, and local WAV export.
+A browser-based chord database with playable chord sets, alternate voicings, octave controls, and local WAV export.
 
 No build step or dependencies are required. Open `index.html` directly, or run a local server:
 

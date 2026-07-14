@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chord Garden — Specimen</title>
+  <title>Chordery — Specimen</title>
   <style>
     :root {
       --blue: #eee2ca;   /* warm newsprint field */
@@ -333,8 +333,8 @@
 </head>
 <body>
   <header class="masthead">
-    <div class="edition-line"><span>Harmonic specimens for the modern ear</span><span>Vol. I · 100 collections</span></div>
-    <h1>Chord<span class="thin">Garden</span></h1>
+    <div class="edition-line"><span>Harmonic specimens for the modern ear</span><span>Vol. I · A working chord database</span></div>
+    <h1>Chord<span class="thin">ery</span></h1>
     <div class="setline">
       <span class="no" id="setNo">001</span>
       <select id="setSelect" aria-label="Chord collection"></select>
@@ -408,8 +408,8 @@
   </main>
 
   <footer class="colophon">
-    <span>Chord Garden · An index of sounding forms</span>
-    <span class="folio">CG—001</span>
+    <span>Chordery · An index of sounding forms</span>
+    <span class="folio">CY—001</span>
     <span>Set in display serif &amp; monospaced furniture · Audio rendered locally</span>
   </footer>
 
@@ -673,7 +673,7 @@
     function renderTicker() {
       const set = currentSet();
       els.setNo.textContent = String(set.num).padStart(3, "0");
-      document.querySelector(".folio").textContent = `CG—${String(set.num).padStart(3, "0")}`;
+      document.querySelector(".folio").textContent = `CY—${String(set.num).padStart(3, "0")}`;
     }
 
     function updateReadout() {
@@ -785,10 +785,12 @@
         button.setAttribute("role", "radio");
         button.setAttribute("aria-checked", state.octave === Number(value));
         button.addEventListener("click", () => {
+          const wasPlaying = Boolean(activeVoice);
+          if (wasPlaying) stop(false);
           state.octave = Number(value);
-          stop();
           renderControls();
           update();
+          if (wasPlaying) start();
         });
         els.octList.append(button);
       });
@@ -1045,25 +1047,33 @@
     async function download() {
       els.download.disabled = true;
       els.download.textContent = "Setting type…";
-      const sampleRate = 44100;
-      const duration = state.playback === "arp" ? 8 * (60 / state.tempo) : 2.5;
-      const context = new OfflineAudioContext(1, Math.ceil(duration * sampleRate), sampleRate);
-      if (state.playback === "arp") buildArp(context, context.destination, duration);
-      else buildChord(context, context.destination);
-      const rendered = await context.startRendering();
-      const blob = new Blob([toWav(rendered)], { type: "audio/wav" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const safeName = currentChord().name.replaceAll("/", "-").replaceAll("#", "sharp");
-      link.href = url;
-      const modeSuffix = state.playback === "arp"
-        ? `${state.arpPattern}-arp-${state.tempo}bpm`
-        : state.voicing;
-      link.download = `${safeName}-${modeSuffix}.wav`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      els.download.disabled = false;
-      els.download.textContent = "Download .WAV ↓";
+      let failed = false;
+      try {
+        const sampleRate = 44100;
+        const duration = state.playback === "arp" ? 8 * (60 / state.tempo) : 2.5;
+        const context = new OfflineAudioContext(1, Math.ceil(duration * sampleRate), sampleRate);
+        if (state.playback === "arp") buildArp(context, context.destination, duration);
+        else buildChord(context, context.destination);
+        const rendered = await context.startRendering();
+        const blob = new Blob([toWav(rendered)], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const safeName = currentChord().name.replaceAll("/", "-").replaceAll("#", "sharp");
+        link.href = url;
+        const modeSuffix = state.playback === "arp"
+          ? `${state.arpPattern}-arp-${state.tempo}bpm`
+          : state.voicing;
+        link.download = `${safeName}-${modeSuffix}.wav`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) {
+        failed = true;
+        console.error("WAV export failed", error);
+        els.download.textContent = "Export failed · retry";
+      } finally {
+        els.download.disabled = false;
+        if (!failed) els.download.textContent = "Download .WAV ↓";
+      }
     }
 
     /* ---------- wiring ---------- */
