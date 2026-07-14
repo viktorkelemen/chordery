@@ -205,8 +205,20 @@
       font: italic 15px/1.45 var(--serif);
       color: #000000b8;
     }
-    #notes span { display: flex; justify-content: space-between; border-bottom: 1px solid #00000033; padding: 2px 0; }
+    #notes button {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1px solid #00000033;
+      padding: 2px 0;
+      font: inherit;
+      text-align: left;
+    }
+    #notes button:hover { color: var(--acid); }
     #notes i { font: 9px/2.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: #00000077; }
+    #notes .weight-mark { min-width: 1.2em; margin-left: 8px; font: 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+    .weight-hint { margin: 5px 0 0; color: #00000080; font-size: 9px; letter-spacing: .04em; }
+    .weight-hint[hidden] { display: none; }
     #play { margin-top: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; border-bottom: 3px solid var(--acid); padding-bottom: 2px; }
     #play:hover { color: var(--acid); }
     .textlist { display: grid; gap: 6px; justify-items: start; }
@@ -342,6 +354,7 @@
         <h4>Now set</h4>
         <div id="symbol"></div>
         <div id="notes" aria-live="polite"></div>
+        <p id="weightHint" class="weight-hint" hidden>click notes · ○ light · ● normal · ◆ heavy</p>
         <button id="play">Play ⏵</button>
       </div>
       <div>
@@ -414,7 +427,7 @@
       voicingList: $("voicingList"), octList: $("octList"), waveform: $("waveform"),
       genreIndex: $("genreIndex"), playbackList: $("playbackList"), arpControls: $("arpControls"),
       patternList: $("patternList"), rateList: $("rateList"), rangeList: $("rangeList"),
-      tempoValue: $("tempoValue")
+      tempoValue: $("tempoValue"), weightHint: $("weightHint")
     };
     const GENRE_GROUPS = {
       All: () => true,
@@ -428,7 +441,7 @@
     };
     const state = {
       voicing: "original", octave: 0, playback: "chord",
-      arpPattern: "up", arpRate: 8, arpRange: 1, tempo: 120
+      arpPattern: "up", arpRate: 8, arpRange: 1, tempo: 120, noteWeights: []
     };
     const VOICINGS = [
       ["original", "Original", ""],
@@ -444,6 +457,9 @@
     const ARP_PATTERNS = [["up", "↑"], ["down", "↓"], ["updown", "↕"], ["random", "∿"]];
     const ARP_RATES = [[4, "¼"], [8, "⅛"], [16, "¹⁄₁₆"]];
     const ARP_RANGES = [[1, "1 oct"], [2, "2 oct"]];
+    const WEIGHT_LEVELS = ["light", "normal", "heavy"];
+    const WEIGHT_GATES = { light: .45, normal: .7, heavy: .95 };
+    const WEIGHT_MARKS = { light: "○", normal: "●", heavy: "◆" };
     let selectedChord = 0;
     let liveContext;
     let activeVoice = null;
@@ -604,6 +620,16 @@
       return `${NOTE_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
     }
 
+    function resetNoteWeights() {
+      state.noteWeights = midiNotes().map(() => "normal");
+    }
+
+    function cycleNoteWeight(index) {
+      const current = state.noteWeights[index] || "normal";
+      state.noteWeights[index] = WEIGHT_LEVELS[(WEIGHT_LEVELS.indexOf(current) + 1) % WEIGHT_LEVELS.length];
+      updateReadout();
+    }
+
     /* ---------- typographic rendering ---------- */
     function renderRows() {
       els.rows.replaceChildren();
@@ -636,6 +662,7 @@
           }
           stop(false);
           selectedChord = index;
+          resetNoteWeights();
           update();
           start();
         });
@@ -651,9 +678,22 @@
 
     function updateReadout() {
       els.symbol.textContent = currentChord().name;
-      els.notes.innerHTML = midiNotes().map((note, index) =>
-        `<span><i>${String(index + 1).padStart(2, "0")}</i>${midiName(note)}</span>`
-      ).join("");
+      const notes = midiNotes();
+      if (state.noteWeights.length !== notes.length) resetNoteWeights();
+      els.notes.replaceChildren();
+      notes.forEach((note, index) => {
+        const weight = state.noteWeights[index];
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute("aria-label", `${midiName(note)}, ${weight} gate; click to change`);
+        button.innerHTML =
+          `<i>${String(index + 1).padStart(2, "0")}</i>` +
+          `<span>${midiName(note)}</span>` +
+          `<b class="weight-mark" aria-hidden="true">${WEIGHT_MARKS[weight]}</b>`;
+        button.addEventListener("click", () => cycleNoteWeight(index));
+        els.notes.append(button);
+      });
+      els.weightHint.hidden = state.playback !== "arp";
       els.play.textContent = activeVoice ? "Stop ■" : state.playback === "arp" ? "Arp ⏵" : "Play ⏵";
     }
 
@@ -730,6 +770,7 @@
           state.voicing = mode;
           const wasPlaying = Boolean(activeVoice);
           if (wasPlaying) stop();
+          resetNoteWeights();
           renderControls();
           update();
           if (wasPlaying) start();
@@ -795,9 +836,11 @@
     }
 
     function arpNotePool() {
-      const base = [...midiNotes()].sort((a, b) => a - b);
+      const base = midiNotes()
+        .map((note, weightIndex) => ({ note, weightIndex }))
+        .sort((a, b) => a.note - b.note);
       if (state.arpRange === 1) return base;
-      return [...base, ...base.map(note => note + 12)];
+      return [...base, ...base.map(event => ({ ...event, note: event.note + 12 }))];
     }
 
     function arpSequence() {
@@ -809,12 +852,16 @@
       return pool;
     }
 
-    function arpNoteAt(step) {
+    function arpEventAt(step) {
       const sequence = arpSequence();
       if (state.arpPattern === "random") {
         return sequence[Math.floor(Math.random() * sequence.length)];
       }
       return sequence[step % sequence.length];
+    }
+
+    function gateForEvent(event) {
+      return WEIGHT_GATES[state.noteWeights[event.weightIndex] || "normal"];
     }
 
     /* ---------- audio engine (reference implementation, unchanged behavior) ---------- */
@@ -888,10 +935,10 @@
 
     function buildArp(context, destination, duration) {
       const stepDuration = arpStepDuration();
-      const gate = stepDuration * .7;
       let step = 0;
       for (let time = .02; time < duration - .02; time += stepDuration) {
-        scheduleArpVoice(context, destination, arpNoteAt(step++), time, gate);
+        const event = arpEventAt(step++);
+        scheduleArpVoice(context, destination, event.note, time, stepDuration * gateForEvent(event));
       }
     }
 
@@ -931,12 +978,13 @@
         if (activeVoice !== session) return;
         const stepDuration = arpStepDuration();
         while (session.nextTime < liveContext.currentTime + .1) {
+          const event = arpEventAt(session.step++);
           scheduleArpVoice(
             liveContext,
             liveContext.destination,
-            arpNoteAt(session.step++),
+            event.note,
             session.nextTime,
-            stepDuration * .7,
+            stepDuration * gateForEvent(event),
             session.oscillators
           );
           session.nextTime += stepDuration;
@@ -1030,6 +1078,7 @@
       stop(false);
       els.set.selectedIndex = (index + els.set.length) % els.set.length;
       selectedChord = 0;
+      resetNoteWeights();
       renderTicker();
       renderGenreIndex();
       replayEntrance();
@@ -1075,6 +1124,7 @@
         const wasPlaying = Boolean(activeVoice);
         stop(false);
         selectedChord = (selectedChord + (event.code === "ArrowDown" ? 1 : 11)) % 12;
+        resetNoteWeights();
         update();
         if (wasPlaying) start();
       }
