@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chord Garden</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0e100d;
+      --surface: #171a15;
+      --surface-2: #11130f;
+      --line: #30352c;
+      --muted: #939b8b;
+      --text: #f3f5ed;
+      --accent: #d9ff73;
+      --accent-ink: #172000;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 18% 0%, #26301c 0, transparent 34%),
+        radial-gradient(circle at 100% 100%, #1a2824 0, transparent 35%),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    main { width: min(920px, 100%); margin: 6vh auto; }
+    header { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 38px; }
+    .eyebrow { color: var(--accent); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; }
+    h1 { margin: 6px 0 0; font: 720 clamp(38px, 7vw, 68px)/.95 system-ui, sans-serif; letter-spacing: -.06em; }
+    .intro { max-width: 310px; margin: 0 0 4px; color: var(--muted); }
+    .set-picker { margin-bottom: 26px; }
+    label { display: grid; gap: 8px; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    select, button {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 12px 14px;
+      font: inherit;
+    }
+    select { width: 100%; }
+    #setSelect { padding: 15px 16px; font-size: 16px; }
+    .section-label { margin: 0 0 10px; color: var(--muted); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+    .pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .pad {
+      min-height: 82px;
+      display: grid;
+      align-content: space-between;
+      text-align: left;
+      cursor: pointer;
+      transition: transform .12s, border-color .12s, background .12s;
+    }
+    .pad:hover { transform: translateY(-2px); border-color: #69755e; }
+    .pad.active { border-color: var(--accent); background: #22291a; box-shadow: inset 0 0 0 1px var(--accent); }
+    .pad.playing { background: var(--accent); color: var(--accent-ink); }
+    .pad.playing .pad-key { color: #46551b; }
+    .pad-key { color: var(--muted); font-size: 11px; }
+    .pad-name { font: 650 18px/1.1 system-ui, sans-serif; letter-spacing: -.02em; }
+    .player {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(260px, .8fr);
+      gap: 24px;
+      margin-top: 30px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      box-shadow: 0 24px 70px #0005;
+    }
+    .selection { display: flex; flex-direction: column; justify-content: space-between; min-height: 138px; }
+    #symbol { font: 720 clamp(38px, 6vw, 56px)/1 system-ui, sans-serif; letter-spacing: -.045em; }
+    #notes { margin-top: 9px; color: var(--muted); }
+    .play {
+      width: 100%;
+      margin-top: 22px;
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .settings { display: grid; grid-template-columns: 1.4fr .8fr; gap: 12px; align-content: start; }
+    .download { grid-column: 1 / -1; width: 100%; margin-top: 2px; cursor: pointer; }
+    button:hover, select:hover { border-color: var(--accent); }
+    button:active { transform: translateY(1px); }
+    .hint { grid-column: 1 / -1; margin: -8px 0 0; color: var(--muted); font-size: 11px; text-align: center; }
+    @media (max-width: 700px) {
+      main { margin-top: 2vh; }
+      header { display: block; }
+      .intro { margin-top: 18px; }
+      .pads { grid-template-columns: repeat(3, 1fr); }
+      .player { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 430px) {
+      body { padding: 16px; }
+      .pads { grid-template-columns: repeat(2, 1fr); }
+      .settings { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">Explore by ear</div>
+        <h1>Chord Garden</h1>
+      </div>
+      <p class="intro">Choose a collection, then tap any chord to hear it. Shape the voicing only when you want to.</p>
+    </header>
+
+    <label class="set-picker">Chord collection
+      <select id="setSelect"></select>
+    </label>
+
+    <p class="section-label">Chords</p>
+    <section id="pads" class="pads" aria-label="Chords in this collection"></section>
+
+    <section class="player" aria-live="polite">
+      <div class="selection">
+        <div>
+          <div id="symbol"></div>
+          <div id="notes"></div>
+        </div>
+        <button id="play" class="play">▶ Play chord</button>
+      </div>
+      <div class="settings">
+        <label>Voicing
+          <select id="voicing">
+            <option value="original">Original</option>
+            <option value="close">Close</option>
+            <option value="open">Open</option>
+            <option value="drop2">Drop 2</option>
+            <option value="wide">Wide</option>
+          </select>
+        </label>
+        <label>Octave
+          <select id="octave">
+            <option value="-1">−1</option>
+            <option value="0" selected>Original</option>
+            <option value="1">+1</option>
+          </select>
+        </label>
+        <button id="download" class="download">↓ Download WAV</button>
+      </div>
+      <p class="hint">Click a chord to play · Click it again to stop · Space bar toggles playback</p>
+    </section>
+  </main>
+
+  <script src="chord_sets.js"></script>
+  <script>
+    const CHORD_SETS = CHORD_SET_DATA;
+    const NOTE_INDEX = { C: 0, "C#": 1, DB: 1, D: 2, "D#": 3, EB: 3, E: 4,
+      F: 5, "F#": 6, GB: 6, G: 7, "G#": 8, AB: 8, A: 9, "A#": 10, BB: 10, B: 11 };
+    const NOTE_NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+    const $ = id => document.getElementById(id);
+    const els = {
+      set: $("setSelect"), pads: $("pads"), voicing: $("voicing"), octave: $("octave"),
+      symbol: $("symbol"), notes: $("notes"), play: $("play"), download: $("download")
+    };
+    let selectedChord = 0;
+    let liveContext;
+    let activeVoice = null;
+
+    CHORD_SETS.forEach(set => {
+      els.set.add(new Option(`${String(set.num).padStart(3, "0")} · ${set.genre}`, set.num));
+    });
+
+    function currentSet() {
+      return CHORD_SETS.find(set => set.num === Number(els.set.value));
+    }
+
+    function currentChord() {
+      return currentSet().chords[selectedChord];
+    }
+
+    function noteToMidi(note) {
+      const match = /^([A-Ga-g])(#|b)?(-?\d+)$/.exec(note.trim());
+      if (!match) throw new Error(`Unrecognized note: ${note}`);
+      const [, letter, accidental, octave] = match;
+      const key = letter.toUpperCase() + (accidental === "b" ? "B" : accidental || "");
+      return (Number(octave) + 1) * 12 + NOTE_INDEX[key];
+    }
+
+    function applyVoicing(source) {
+      const notes = [...source].sort((a, b) => a - b);
+      const mode = els.voicing.value;
+      if (mode === "original") return source;
+
+      const pitchClasses = [...new Set(notes.map(note => ((note % 12) + 12) % 12))];
+      if (mode === "close") {
+        const lowest = notes[0];
+        return pitchClasses.map(pc => {
+          let note = Math.floor(lowest / 12) * 12 + pc;
+          while (note < lowest) note += 12;
+          return note;
+        }).sort((a, b) => a - b);
+      }
+      if (mode === "open") {
+        const close = applyClose(notes);
+        return close.map((note, i) => i > 0 && i % 2 ? note + 12 : note).sort((a, b) => a - b);
+      }
+      if (mode === "drop2") {
+        if (notes.length < 3) return notes;
+        notes[notes.length - 2] -= 12;
+        return notes.sort((a, b) => a - b);
+      }
+      if (mode === "wide") {
+        const close = applyClose(notes);
+        return close.map((note, i) => note + Math.floor((i + 1) / 2) * 12).sort((a, b) => a - b);
+      }
+      return notes;
+    }
+
+    function applyClose(notes) {
+      const sorted = [...notes].sort((a, b) => a - b);
+      const pitchClasses = [...new Set(sorted.map(note => ((note % 12) + 12) % 12))];
+      const lowest = sorted[0];
+      return pitchClasses.map(pc => {
+        let note = Math.floor(lowest / 12) * 12 + pc;
+        while (note < lowest) note += 12;
+        return note;
+      }).sort((a, b) => a - b);
+    }
+
+    function midiNotes() {
+      const original = currentChord().notes.map(noteToMidi);
+      const shift = Number(els.octave.value) * 12;
+      return applyVoicing(original).map(note => note + shift);
+    }
+
+    function midiName(midi) {
+      return `${NOTE_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+    }
+
+    function renderPads() {
+      els.pads.replaceChildren();
+      currentSet().chords.forEach((chord, index) => {
+        const button = document.createElement("button");
+        const isSelected = index === selectedChord;
+        button.className = "pad" + (isSelected ? " active" : "") + (isSelected && activeVoice ? " playing" : "");
+        button.innerHTML = `<span class="pad-key">${chord.key}</span><span class="pad-name">${chord.name}</span>`;
+        button.setAttribute("aria-pressed", Boolean(isSelected && activeVoice));
+        button.addEventListener("click", () => {
+          if (index === selectedChord && activeVoice) {
+            stop();
+            return;
+          }
+          stop(false);
+          selectedChord = index;
+          update();
+          start();
+        });
+        els.pads.append(button);
+      });
+    }
+
+    function updateReadout() {
+      els.symbol.textContent = currentChord().name;
+      els.notes.textContent = midiNotes().map(midiName).join("  ·  ");
+    }
+
+    function update() {
+      renderPads();
+      updateReadout();
+    }
+
+    function buildChord(context, destination, start = 0) {
+      const duration = 2.5;
+      const attack = .025;
+      const notes = midiNotes();
+      const master = context.createGain();
+      master.gain.value = .72 / notes.length;
+      master.connect(destination);
+
+      notes.forEach(midi => {
+        const oscillator = context.createOscillator();
+        const envelope = context.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12);
+        envelope.gain.setValueAtTime(.0001, start);
+        envelope.gain.exponentialRampToValueAtTime(1, start + attack);
+        envelope.gain.setValueAtTime(1, start + duration - .12);
+        envelope.gain.exponentialRampToValueAtTime(.0001, start + duration);
+        oscillator.connect(envelope).connect(master);
+        oscillator.start(start);
+        oscillator.stop(start + duration);
+      });
+    }
+
+    async function start() {
+      liveContext ||= new AudioContext();
+      await liveContext.resume();
+      if (activeVoice) stop(false);
+
+      const now = liveContext.currentTime;
+      const notes = midiNotes();
+      const master = liveContext.createGain();
+      const oscillators = [];
+      master.gain.setValueAtTime(.0001, now);
+      master.gain.exponentialRampToValueAtTime(.72 / notes.length, now + .025);
+      master.connect(liveContext.destination);
+
+      notes.forEach(midi => {
+        const oscillator = liveContext.createOscillator();
+        oscillator.type = "sine";
+        oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12);
+        oscillator.connect(master);
+        oscillator.start(now);
+        oscillators.push(oscillator);
+      });
+
+      activeVoice = { master, oscillators };
+      els.play.textContent = "■ Stop chord";
+      renderPads();
+    }
+
+    function stop(render = true) {
+      if (!activeVoice || !liveContext) return;
+      const now = liveContext.currentTime;
+      const { master, oscillators } = activeVoice;
+      master.gain.cancelScheduledValues(now);
+      master.gain.setValueAtTime(Math.max(.0001, master.gain.value), now);
+      master.gain.exponentialRampToValueAtTime(.0001, now + .08);
+      oscillators.forEach(oscillator => oscillator.stop(now + .085));
+      activeVoice = null;
+      els.play.textContent = "▶ Play chord";
+      if (render) renderPads();
+    }
+
+    function togglePlayback() {
+      if (activeVoice) stop();
+      else start();
+    }
+
+    function toWav(buffer) {
+      const frames = buffer.length;
+      const array = new ArrayBuffer(44 + frames * 2);
+      const view = new DataView(array);
+      let offset = 0;
+      const text = value => { for (const char of value) view.setUint8(offset++, char.charCodeAt(0)); };
+      const u16 = value => { view.setUint16(offset, value, true); offset += 2; };
+      const u32 = value => { view.setUint32(offset, value, true); offset += 4; };
+      text("RIFF"); u32(36 + frames * 2); text("WAVE"); text("fmt "); u32(16);
+      u16(1); u16(1); u32(buffer.sampleRate); u32(buffer.sampleRate * 2); u16(2); u16(16);
+      text("data"); u32(frames * 2);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < frames; i++) {
+        const sample = Math.max(-1, Math.min(1, channel[i]));
+        view.setInt16(offset, sample < 0 ? sample * 32768 : sample * 32767, true);
+        offset += 2;
+      }
+      return array;
+    }
+
+    async function download() {
+      els.download.disabled = true;
+      els.download.textContent = "Rendering…";
+      const sampleRate = 44100;
+      const context = new OfflineAudioContext(1, 2.5 * sampleRate, sampleRate);
+      buildChord(context, context.destination);
+      const rendered = await context.startRendering();
+      const blob = new Blob([toWav(rendered)], { type: "audio/wav" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const safeName = currentChord().name.replaceAll("/", "-").replaceAll("#", "sharp");
+      link.href = url;
+      link.download = `${safeName}-${els.voicing.value}.wav`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      els.download.disabled = false;
+      els.download.textContent = "↓ Download WAV";
+    }
+
+    els.set.addEventListener("input", () => { stop(false); selectedChord = 0; update(); });
+    els.voicing.addEventListener("input", () => { stop(); updateReadout(); });
+    els.octave.addEventListener("input", () => { stop(); updateReadout(); });
+    els.play.addEventListener("click", togglePlayback);
+    els.download.addEventListener("click", download);
+    document.addEventListener("keydown", event => {
+      if (event.code === "Space" && !event.repeat && event.target.tagName !== "SELECT") {
+        event.preventDefault();
+        togglePlayback();
+      }
+    });
+    update();
+  </script>
+</body>
+</html>
