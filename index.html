@@ -85,6 +85,11 @@
       cursor: pointer;
     }
     .settings { display: grid; grid-template-columns: 1.4fr .8fr; gap: 12px; align-content: start; }
+    .voicing-control { display: grid; gap: 8px; }
+    .control-label { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .stepper { display: grid; grid-template-columns: 42px 1fr 42px; gap: 6px; }
+    .stepper button { padding: 10px 6px; cursor: pointer; }
+    #voicingName { display: grid; place-items: center; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
     .download { grid-column: 1 / -1; width: 100%; margin-top: 2px; cursor: pointer; }
     button:hover, select:hover { border-color: var(--accent); }
     button:active { transform: translateY(1px); }
@@ -129,15 +134,14 @@
         <button id="play" class="play">▶ Play chord</button>
       </div>
       <div class="settings">
-        <label>Voicing
-          <select id="voicing">
-            <option value="original">Original</option>
-            <option value="close">Close</option>
-            <option value="open">Open</option>
-            <option value="drop2">Drop 2</option>
-            <option value="wide">Wide</option>
-          </select>
-        </label>
+        <div class="voicing-control">
+          <span class="control-label">Voicing</span>
+          <div class="stepper">
+            <button id="voicingPrev" type="button" aria-label="Previous voicing">↓</button>
+            <span id="voicingName">Original</span>
+            <button id="voicingNext" type="button" aria-label="Next voicing">↑</button>
+          </div>
+        </div>
         <label>Octave
           <select id="octave">
             <option value="-1">−1</option>
@@ -159,9 +163,18 @@
     const NOTE_NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
     const $ = id => document.getElementById(id);
     const els = {
-      set: $("setSelect"), pads: $("pads"), voicing: $("voicing"), octave: $("octave"),
+      set: $("setSelect"), pads: $("pads"), octave: $("octave"),
+      voicingPrev: $("voicingPrev"), voicingNext: $("voicingNext"), voicingName: $("voicingName"),
       symbol: $("symbol"), notes: $("notes"), play: $("play"), download: $("download")
     };
+    const VOICINGS = [
+      { value: "original", label: "Original" },
+      { value: "close", label: "Close" },
+      { value: "open", label: "Open" },
+      { value: "drop2", label: "Drop 2" },
+      { value: "wide", label: "Wide" }
+    ];
+    let voicingIndex = 0;
     let selectedChord = 0;
     let liveContext;
     let activeVoice = null;
@@ -188,7 +201,7 @@
 
     function applyVoicing(source) {
       const notes = [...source].sort((a, b) => a - b);
-      const mode = els.voicing.value;
+      const mode = VOICINGS[voicingIndex].value;
       if (mode === "original") return source;
 
       const pitchClasses = [...new Set(notes.map(note => ((note % 12) + 12) % 12))];
@@ -260,6 +273,7 @@
     }
 
     function updateReadout() {
+      els.voicingName.textContent = VOICINGS[voicingIndex].label;
       els.symbol.textContent = currentChord().name;
       els.notes.textContent = midiNotes().map(midiName).join("  ·  ");
     }
@@ -369,7 +383,7 @@
       const link = document.createElement("a");
       const safeName = currentChord().name.replaceAll("/", "-").replaceAll("#", "sharp");
       link.href = url;
-      link.download = `${safeName}-${els.voicing.value}.wav`;
+      link.download = `${safeName}-${VOICINGS[voicingIndex].value}.wav`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       els.download.disabled = false;
@@ -377,11 +391,30 @@
     }
 
     els.set.addEventListener("input", () => { stop(false); selectedChord = 0; update(); });
-    els.voicing.addEventListener("input", () => { stop(); updateReadout(); });
+    function changeVoicing(direction) {
+      const wasPlaying = Boolean(activeVoice);
+      if (wasPlaying) stop();
+      voicingIndex = (voicingIndex + direction + VOICINGS.length) % VOICINGS.length;
+      updateReadout();
+      if (wasPlaying) start();
+    }
+
+    els.voicingPrev.addEventListener("click", () => changeVoicing(-1));
+    els.voicingNext.addEventListener("click", () => changeVoicing(1));
     els.octave.addEventListener("input", () => { stop(); updateReadout(); });
     els.play.addEventListener("click", togglePlayback);
     els.download.addEventListener("click", download);
     document.addEventListener("keydown", event => {
+      if (event.target.tagName !== "SELECT" && event.key === "ArrowDown") {
+        event.preventDefault();
+        changeVoicing(-1);
+        return;
+      }
+      if (event.target.tagName !== "SELECT" && event.key === "ArrowUp") {
+        event.preventDefault();
+        changeVoicing(1);
+        return;
+      }
       if (event.code === "Space" && !event.repeat && event.target.tagName !== "SELECT") {
         event.preventDefault();
         togglePlayback();
