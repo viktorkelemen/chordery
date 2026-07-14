@@ -91,6 +91,10 @@
     .stepper button { padding: 10px 6px; cursor: pointer; }
     #voicingName { display: grid; place-items: center; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
     .download { grid-column: 1 / -1; width: 100%; margin-top: 2px; cursor: pointer; }
+    .sound-options { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+    .sound-options summary { width: max-content; cursor: pointer; user-select: none; }
+    .sound-options label { margin-top: 10px; }
+    .sound-options select { padding: 9px 12px; }
     button:hover, select:hover { border-color: var(--accent); }
     button:active { transform: translateY(1px); }
     .hint { grid-column: 1 / -1; margin: -8px 0 0; color: var(--muted); font-size: 11px; text-align: center; }
@@ -150,6 +154,17 @@
           </select>
         </label>
         <button id="download" class="download">↓ Download WAV</button>
+        <details class="sound-options">
+          <summary>Sound options</summary>
+          <label>Waveform
+            <select id="waveform">
+              <option value="sine">Sine</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+              <option value="sawtooth">Sawtooth</option>
+            </select>
+          </label>
+        </details>
       </div>
       <p class="hint">Click a chord to play · Click it again to stop · Space bar toggles playback</p>
     </section>
@@ -163,7 +178,7 @@
     const NOTE_NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
     const $ = id => document.getElementById(id);
     const els = {
-      set: $("setSelect"), pads: $("pads"), octave: $("octave"),
+      set: $("setSelect"), pads: $("pads"), octave: $("octave"), waveform: $("waveform"),
       voicingPrev: $("voicingPrev"), voicingNext: $("voicingNext"), voicingName: $("voicingName"),
       symbol: $("symbol"), notes: $("notes"), play: $("play"), download: $("download")
     };
@@ -294,7 +309,7 @@
       notes.forEach(midi => {
         const oscillator = context.createOscillator();
         const envelope = context.createGain();
-        oscillator.type = "sine";
+        oscillator.type = els.waveform.value;
         oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12);
         envelope.gain.setValueAtTime(.0001, start);
         envelope.gain.exponentialRampToValueAtTime(1, start + attack);
@@ -321,7 +336,7 @@
 
       notes.forEach(midi => {
         const oscillator = liveContext.createOscillator();
-        oscillator.type = "sine";
+        oscillator.type = els.waveform.value;
         oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12);
         oscillator.connect(master);
         oscillator.start(now);
@@ -402,6 +417,10 @@
     els.voicingPrev.addEventListener("click", () => changeVoicing(-1));
     els.voicingNext.addEventListener("click", () => changeVoicing(1));
     els.octave.addEventListener("input", () => { stop(); updateReadout(); });
+    els.waveform.addEventListener("input", () => {
+      const wasPlaying = Boolean(activeVoice);
+      if (wasPlaying) { stop(); start(); }
+    });
     els.play.addEventListener("click", togglePlayback);
     els.download.addEventListener("click", download);
     document.addEventListener("keydown", event => {
