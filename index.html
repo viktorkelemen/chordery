@@ -214,7 +214,32 @@
     .textlist button:hover { color: var(--paper); }
     .textlist button.on { color: var(--acid); font-weight: 800; }
     .textlist button.on::before { content: "● "; }
+    .textlist .group-label {
+      margin-top: 7px;
+      color: #00000077;
+      font-size: 9px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
     .inline-list { display: flex; gap: 16px; }
+    .arp-controls {
+      display: grid;
+      gap: 18px;
+      border-top: 1px solid #00000055;
+      border-bottom: 1px solid #00000055;
+      padding: 14px 0;
+    }
+    .arp-controls[hidden] { display: none; }
+    .tempo {
+      display: grid;
+      grid-template-columns: auto minmax(44px, auto) auto;
+      gap: 12px;
+      align-items: baseline;
+      justify-content: start;
+    }
+    .tempo button { color: var(--acid); font-weight: 800; }
+    #tempoValue { font: italic 22px/1 var(--serif); }
+    #tempoValue::after { content: " bpm"; font: 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
     #waveform {
       appearance: none; -webkit-appearance: none;
       background: transparent; color: var(--paper);
@@ -251,6 +276,8 @@
     .colophon span:last-child { text-align: right; }
 
     @media (max-width: 760px) {
+      body { overflow-x: hidden; }
+      h1 { font-size: clamp(38px, 11.5vw, 52px); letter-spacing: -.055em; }
       .sheet { grid-template-columns: 1fr; }
       .margin {
         position: fixed;
@@ -273,6 +300,9 @@
       #symbol { font-size: 24px; }
       #notes { font-size: 13px; margin-top: 2px; }
       .textlist { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+      .textlist .group-label { flex-basis: 100%; margin-top: 2px; }
+      .arp-controls { display: contents; }
+      .arp-controls[hidden] { display: none; }
       #download { padding: 9px 14px; }
       .margin .readout { grid-row: span 2; }
       .margin #download { align-self: end; }
@@ -313,6 +343,32 @@
         <div id="symbol"></div>
         <div id="notes" aria-live="polite"></div>
         <button id="play">Play ⏵</button>
+      </div>
+      <div>
+        <h4>Playback</h4>
+        <div class="textlist inline-list" id="playbackList" role="radiogroup" aria-label="Playback mode"></div>
+      </div>
+      <div id="arpControls" class="arp-controls" hidden>
+        <div>
+          <h4>Figure</h4>
+          <div class="textlist inline-list" id="patternList" role="radiogroup" aria-label="Arpeggio pattern"></div>
+        </div>
+        <div>
+          <h4>Tempo</h4>
+          <div class="tempo">
+            <button id="tempoDown" aria-label="Decrease tempo">−</button>
+            <output id="tempoValue">120</output>
+            <button id="tempoUp" aria-label="Increase tempo">+</button>
+          </div>
+        </div>
+        <div>
+          <h4>Division</h4>
+          <div class="textlist inline-list" id="rateList" role="radiogroup" aria-label="Arpeggio division"></div>
+        </div>
+        <div>
+          <h4>Range</h4>
+          <div class="textlist inline-list" id="rangeList" role="radiogroup" aria-label="Arpeggio octave range"></div>
+        </div>
       </div>
       <div>
         <h4>Voicing</h4>
@@ -356,7 +412,9 @@
       set: $("setSelect"), setNo: $("setNo"), rows: $("rows"),
       symbol: $("symbol"), notes: $("notes"), play: $("play"), download: $("download"),
       voicingList: $("voicingList"), octList: $("octList"), waveform: $("waveform"),
-      genreIndex: $("genreIndex")
+      genreIndex: $("genreIndex"), playbackList: $("playbackList"), arpControls: $("arpControls"),
+      patternList: $("patternList"), rateList: $("rateList"), rangeList: $("rangeList"),
+      tempoValue: $("tempoValue")
     };
     const GENRE_GROUPS = {
       All: () => true,
@@ -368,9 +426,24 @@
       Classical: genre => /classical|trad/i.test(genre),
       Modern: genre => /modern|stack|utility/i.test(genre)
     };
-    const state = { voicing: "original", octave: 0 };
-    const VOICINGS = ["original", "close", "open", "drop2", "wide"];
+    const state = {
+      voicing: "original", octave: 0, playback: "chord",
+      arpPattern: "up", arpRate: 8, arpRange: 1, tempo: 120
+    };
+    const VOICINGS = [
+      ["original", "Original", ""],
+      ["first", "1st", "Inversions"], ["second", "2nd", "Inversions"], ["third", "3rd", "Inversions"],
+      ["close", "Close", "Spacing"], ["open", "Open", "Spacing"], ["wide", "Wide", "Spacing"],
+      ["spread", "Spread", "Spacing"], ["drop2", "Drop 2", "Spacing"], ["drop3", "Drop 3", "Spacing"],
+      ["rootless", "Rootless", "Reduced"], ["shell", "Shell", "Reduced"], ["no5", "No fifth", "Reduced"],
+      ["doubleRoot", "Root doubled", "Bass"], ["pedal", "Bass pedal", "Bass"],
+      ["cluster", "Cluster", "Experimental"], ["quartal", "Quartal", "Experimental"]
+    ];
     const OCTAVES = [["-1", "−1"], ["0", "0"], ["1", "+1"]];
+    const PLAYBACK_MODES = [["chord", "Chord"], ["arp", "Arp"]];
+    const ARP_PATTERNS = [["up", "↑"], ["down", "↓"], ["updown", "↕"], ["random", "∿"]];
+    const ARP_RATES = [[4, "¼"], [8, "⅛"], [16, "¹⁄₁₆"]];
+    const ARP_RANGES = [[1, "1 oct"], [2, "2 oct"]];
     let selectedChord = 0;
     let liveContext;
     let activeVoice = null;
@@ -401,29 +474,74 @@
       const notes = [...source].sort((a, b) => a - b);
       const mode = state.voicing;
       if (mode === "original") return source;
+
       const pitchClasses = [...new Set(notes.map(note => ((note % 12) + 12) % 12))];
+      const close = applyClose(notes);
+      const root = chordRootPitchClass();
+      const interval = note => (((note % 12) + 12) % 12 - root + 12) % 12;
+
+      if (["first", "second", "third"].includes(mode)) {
+        const result = [...close];
+        const rotations = { first: 1, second: 2, third: 3 }[mode];
+        for (let i = 0; i < Math.min(rotations, result.length - 1); i++) {
+          result.push(result.shift() + 12);
+        }
+        return result;
+      }
       if (mode === "close") {
-        const lowest = notes[0];
-        return pitchClasses.map(pc => {
-          let note = Math.floor(lowest / 12) * 12 + pc;
-          while (note < lowest) note += 12;
-          return note;
-        }).sort((a, b) => a - b);
+        return close;
       }
       if (mode === "open") {
-        const close = applyClose(notes);
         return close.map((note, i) => i > 0 && i % 2 ? note + 12 : note).sort((a, b) => a - b);
       }
-      if (mode === "drop2") {
-        if (notes.length < 3) return notes;
-        notes[notes.length - 2] -= 12;
-        return notes.sort((a, b) => a - b);
+      if (mode === "drop2" || mode === "drop3") {
+        const result = [...close];
+        const fromTop = mode === "drop2" ? 2 : 3;
+        if (result.length < fromTop) return result;
+        result[result.length - fromTop] -= 12;
+        return result.sort((a, b) => a - b);
       }
       if (mode === "wide") {
-        const close = applyClose(notes);
         return close.map((note, i) => note + Math.floor((i + 1) / 2) * 12).sort((a, b) => a - b);
       }
+      if (mode === "spread") {
+        return close.map((note, i) => note + i * 12);
+      }
+      if (mode === "cluster") {
+        return tightestCluster(pitchClasses, notes[0]);
+      }
+      if (mode === "rootless") {
+        const result = close.filter(note => interval(note) !== 0);
+        return result.length > 1 ? result : close;
+      }
+      if (mode === "shell") {
+        const result = close.filter(note => [0, 3, 4, 10, 11].includes(interval(note)));
+        return result.length > 1 ? result : close.slice(0, Math.min(3, close.length));
+      }
+      if (mode === "no5") {
+        const result = close.filter(note => interval(note) !== 7);
+        return result.length > 1 ? result : close;
+      }
+      if (mode === "doubleRoot") {
+        let topRoot = Math.floor(close.at(-1) / 12) * 12 + root;
+        while (topRoot <= close.at(-1)) topRoot += 12;
+        return [...close, topRoot];
+      }
+      if (mode === "pedal") {
+        const bass = notes[0] - 12;
+        return [bass, ...close.filter(note => note !== bass)];
+      }
+      if (mode === "quartal") {
+        return quartalOrder(pitchClasses, notes[0]);
+      }
       return notes;
+    }
+
+    function chordRootPitchClass() {
+      const match = /^([A-Ga-g])(#|b)?/.exec(currentChord().name);
+      if (!match) return ((noteToMidi(currentChord().notes.at(-1)) % 12) + 12) % 12;
+      const key = match[1].toUpperCase() + (match[2] === "b" ? "B" : match[2] || "");
+      return NOTE_INDEX[key];
     }
 
     function applyClose(notes) {
@@ -435,6 +553,45 @@
         while (note < lowest) note += 12;
         return note;
       }).sort((a, b) => a - b);
+    }
+
+    function tightestCluster(pitchClasses, anchor) {
+      const pcs = [...pitchClasses].sort((a, b) => a - b);
+      let best = null;
+      for (let rotation = 0; rotation < pcs.length; rotation++) {
+        const rotated = [...pcs.slice(rotation), ...pcs.slice(0, rotation).map(pc => pc + 12)];
+        const span = rotated.at(-1) - rotated[0];
+        if (!best || span < best.span) best = { values: rotated, span };
+      }
+      const offset = Math.floor(anchor / 12) * 12;
+      let result = best.values.map(value => offset + value);
+      while (result[0] < anchor - 6) result = result.map(note => note + 12);
+      while (result[0] > anchor + 6) result = result.map(note => note - 12);
+      return result;
+    }
+
+    function quartalOrder(pitchClasses, anchor) {
+      const remaining = [...pitchClasses];
+      const startIndex = remaining.indexOf(chordRootPitchClass());
+      const ordered = [remaining.splice(startIndex >= 0 ? startIndex : 0, 1)[0]];
+      while (remaining.length) {
+        const last = ordered.at(-1);
+        let bestIndex = 0;
+        let bestDistance = Infinity;
+        remaining.forEach((pc, index) => {
+          let candidate = pc;
+          while (candidate <= last) candidate += 12;
+          const distance = Math.abs(candidate - last - 5);
+          if (distance < bestDistance) { bestDistance = distance; bestIndex = index; }
+        });
+        let next = remaining.splice(bestIndex, 1)[0];
+        while (next <= ordered.at(-1)) next += 12;
+        ordered.push(next);
+      }
+      const offset = Math.floor(anchor / 12) * 12;
+      let result = ordered.map(note => offset + note);
+      while (result[0] < anchor) result = result.map(note => note + 12);
+      return result;
     }
 
     function midiNotes() {
@@ -458,7 +615,10 @@
           (isSelected && activeVoice ? " playing" : "");
         row.setAttribute("aria-pressed", Boolean(isSelected && activeVoice));
         const octaveLabel = state.octave > 0 ? `+${state.octave}` : state.octave;
-        const tapeUnit = `${midiNotes().map(midiName).join(" — ")} · ${state.voicing} · octave ${octaveLabel} · ${els.waveform.value} — `;
+        const playbackLabel = state.playback === "arp"
+          ? `${state.arpPattern} arp · ${state.tempo} bpm · 1/${state.arpRate}`
+          : "sustained chord";
+        const tapeUnit = `${midiNotes().map(midiName).join(" — ")} · ${state.voicing} · octave ${octaveLabel} · ${els.waveform.value} · ${playbackLabel} — `;
         const tapeText = isSelected
           ? tapeUnit.repeat(6)
           : "";
@@ -494,7 +654,7 @@
       els.notes.innerHTML = midiNotes().map((note, index) =>
         `<span><i>${String(index + 1).padStart(2, "0")}</i>${midiName(note)}</span>`
       ).join("");
-      els.play.textContent = activeVoice ? "Stop ■" : "Play ⏵";
+      els.play.textContent = activeVoice ? "Stop ■" : state.playback === "arp" ? "Arp ⏵" : "Play ⏵";
     }
 
     function update() {
@@ -503,11 +663,67 @@
     }
 
     function renderControls() {
+      function fillRadioGroup(element, options, current, onSelect) {
+        element.replaceChildren();
+        options.forEach(([value, label]) => {
+          const button = document.createElement("button");
+          button.className = current === value ? "on" : "";
+          button.textContent = label;
+          button.setAttribute("role", "radio");
+          button.setAttribute("aria-checked", current === value);
+          button.addEventListener("click", () => onSelect(value));
+          element.append(button);
+        });
+      }
+
+      fillRadioGroup(els.playbackList, PLAYBACK_MODES, state.playback, mode => {
+        const wasPlaying = Boolean(activeVoice);
+        if (wasPlaying) stop(false);
+        state.playback = mode;
+        renderControls();
+        update();
+        if (wasPlaying) start();
+      });
+      els.arpControls.hidden = state.playback !== "arp";
+      fillRadioGroup(els.patternList, ARP_PATTERNS, state.arpPattern, pattern => {
+        const wasPlaying = Boolean(activeVoice);
+        if (wasPlaying) stop(false);
+        state.arpPattern = pattern;
+        renderControls();
+        update();
+        if (wasPlaying) start();
+      });
+      fillRadioGroup(els.rateList, ARP_RATES, state.arpRate, rate => {
+        const wasPlaying = Boolean(activeVoice);
+        if (wasPlaying) stop(false);
+        state.arpRate = rate;
+        renderControls();
+        update();
+        if (wasPlaying) start();
+      });
+      fillRadioGroup(els.rangeList, ARP_RANGES, state.arpRange, range => {
+        const wasPlaying = Boolean(activeVoice);
+        if (wasPlaying) stop(false);
+        state.arpRange = range;
+        renderControls();
+        update();
+        if (wasPlaying) start();
+      });
+      els.tempoValue.value = state.tempo;
+
       els.voicingList.replaceChildren();
-      VOICINGS.forEach(mode => {
+      let currentVoicingGroup = "";
+      VOICINGS.forEach(([mode, label, group]) => {
+        if (group && group !== currentVoicingGroup) {
+          const heading = document.createElement("span");
+          heading.className = "group-label";
+          heading.textContent = group;
+          els.voicingList.append(heading);
+          currentVoicingGroup = group;
+        }
         const button = document.createElement("button");
         button.className = state.voicing === mode ? "on" : "";
-        button.textContent = mode === "drop2" ? "Drop 2" : mode;
+        button.textContent = label;
         button.setAttribute("role", "radio");
         button.setAttribute("aria-checked", state.voicing === mode);
         button.addEventListener("click", () => {
@@ -574,6 +790,33 @@
       history.replaceState(null, "", `#set=${currentSet().num}`);
     }
 
+    function arpStepDuration() {
+      return (60 / state.tempo) * (4 / state.arpRate);
+    }
+
+    function arpNotePool() {
+      const base = [...midiNotes()].sort((a, b) => a - b);
+      if (state.arpRange === 1) return base;
+      return [...base, ...base.map(note => note + 12)];
+    }
+
+    function arpSequence() {
+      const pool = arpNotePool();
+      if (state.arpPattern === "down") return [...pool].reverse();
+      if (state.arpPattern === "updown" && pool.length > 1) {
+        return [...pool, ...pool.slice(1, -1).reverse()];
+      }
+      return pool;
+    }
+
+    function arpNoteAt(step) {
+      const sequence = arpSequence();
+      if (state.arpPattern === "random") {
+        return sequence[Math.floor(Math.random() * sequence.length)];
+      }
+      return sequence[step % sequence.length];
+    }
+
     /* ---------- audio engine (reference implementation, unchanged behavior) ---------- */
     function oscillatorLayers() {
       if (els.waveform.value === "harmonic") {
@@ -623,10 +866,43 @@
       });
     }
 
+    function scheduleArpVoice(context, destination, midi, start, duration, collection) {
+      const envelope = context.createGain();
+      const attack = Math.min(.008, duration * .2);
+      const release = Math.min(.04, duration * .25);
+      envelope.gain.setValueAtTime(.0001, start);
+      envelope.gain.exponentialRampToValueAtTime(.42, start + attack);
+      envelope.gain.setValueAtTime(.42, Math.max(start + attack, start + duration - release));
+      envelope.gain.exponentialRampToValueAtTime(.0001, start + duration);
+      envelope.connect(destination);
+      const oscillators = createVoice(context, envelope, midi, start);
+      oscillators.forEach(oscillator => {
+        if (collection) {
+          collection.add(oscillator);
+          oscillator.onended = () => collection.delete(oscillator);
+        }
+        oscillator.stop(start + duration + .005);
+      });
+      return oscillators;
+    }
+
+    function buildArp(context, destination, duration) {
+      const stepDuration = arpStepDuration();
+      const gate = stepDuration * .7;
+      let step = 0;
+      for (let time = .02; time < duration - .02; time += stepDuration) {
+        scheduleArpVoice(context, destination, arpNoteAt(step++), time, gate);
+      }
+    }
+
     async function start() {
       liveContext ||= new AudioContext();
       await liveContext.resume();
       if (activeVoice) stop(false);
+      if (state.playback === "arp") {
+        startArp();
+        return;
+      }
       const now = liveContext.currentTime;
       const notes = midiNotes();
       const master = liveContext.createGain();
@@ -637,13 +913,53 @@
       notes.forEach(midi => {
         oscillators.push(...createVoice(liveContext, master, midi, now));
       });
-      activeVoice = { master, oscillators };
+      activeVoice = { kind: "chord", master, oscillators };
+      update();
+    }
+
+    function startArp() {
+      const session = {
+        kind: "arp",
+        nextTime: liveContext.currentTime + .02,
+        step: 0,
+        timer: null,
+        oscillators: new Set()
+      };
+      activeVoice = session;
+
+      function schedule() {
+        if (activeVoice !== session) return;
+        const stepDuration = arpStepDuration();
+        while (session.nextTime < liveContext.currentTime + .1) {
+          scheduleArpVoice(
+            liveContext,
+            liveContext.destination,
+            arpNoteAt(session.step++),
+            session.nextTime,
+            stepDuration * .7,
+            session.oscillators
+          );
+          session.nextTime += stepDuration;
+        }
+        session.timer = setTimeout(schedule, 25);
+      }
+
+      schedule();
       update();
     }
 
     function stop(render = true) {
       if (!activeVoice || !liveContext) return;
       const now = liveContext.currentTime;
+      if (activeVoice.kind === "arp") {
+        clearTimeout(activeVoice.timer);
+        activeVoice.oscillators.forEach(oscillator => {
+          try { oscillator.stop(now + .03); } catch {}
+        });
+        activeVoice = null;
+        if (render) update();
+        return;
+      }
       const { master, oscillators } = activeVoice;
       master.gain.cancelScheduledValues(now);
       master.gain.setValueAtTime(Math.max(.0001, master.gain.value), now);
@@ -682,15 +998,20 @@
       els.download.disabled = true;
       els.download.textContent = "Setting type…";
       const sampleRate = 44100;
-      const context = new OfflineAudioContext(1, 2.5 * sampleRate, sampleRate);
-      buildChord(context, context.destination);
+      const duration = state.playback === "arp" ? 8 * (60 / state.tempo) : 2.5;
+      const context = new OfflineAudioContext(1, Math.ceil(duration * sampleRate), sampleRate);
+      if (state.playback === "arp") buildArp(context, context.destination, duration);
+      else buildChord(context, context.destination);
       const rendered = await context.startRendering();
       const blob = new Blob([toWav(rendered)], { type: "audio/wav" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const safeName = currentChord().name.replaceAll("/", "-").replaceAll("#", "sharp");
       link.href = url;
-      link.download = `${safeName}-${state.voicing}.wav`;
+      const modeSuffix = state.playback === "arp"
+        ? `${state.arpPattern}-arp-${state.tempo}bpm`
+        : state.voicing;
+      link.download = `${safeName}-${modeSuffix}.wav`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       els.download.disabled = false;
@@ -728,6 +1049,16 @@
       activeGenreGroup = "All";
       selectSet(els.set.selectedIndex + 1);
     });
+    function changeTempo(delta) {
+      const wasPlaying = Boolean(activeVoice);
+      if (wasPlaying) stop(false);
+      state.tempo = Math.max(60, Math.min(180, state.tempo + delta));
+      renderControls();
+      update();
+      if (wasPlaying) start();
+    }
+    $("tempoDown").addEventListener("click", () => changeTempo(-5));
+    $("tempoUp").addEventListener("click", () => changeTempo(5));
     els.waveform.addEventListener("input", () => {
       if (activeVoice) { stop(); start(); }
     });
