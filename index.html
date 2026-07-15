@@ -200,6 +200,7 @@
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0 12px;
+      min-height: 88px;
       margin-top: 10px;
       border-top: 1px solid #00000044;
       font: italic 15px/1.45 var(--serif);
@@ -363,6 +364,10 @@
       </div>
       <div id="arpControls" class="arp-controls" hidden>
         <div>
+          <h4>Feel</h4>
+          <div class="textlist" id="feelList" role="radiogroup" aria-label="Arpeggio feel"></div>
+        </div>
+        <div>
           <h4>Figure</h4>
           <div class="textlist inline-list" id="patternList" role="radiogroup" aria-label="Arpeggio pattern"></div>
         </div>
@@ -426,7 +431,7 @@
       symbol: $("symbol"), notes: $("notes"), play: $("play"), download: $("download"),
       voicingList: $("voicingList"), octList: $("octList"), waveform: $("waveform"),
       genreIndex: $("genreIndex"), playbackList: $("playbackList"), arpControls: $("arpControls"),
-      patternList: $("patternList"), rateList: $("rateList"), rangeList: $("rangeList"),
+      feelList: $("feelList"), patternList: $("patternList"), rateList: $("rateList"), rangeList: $("rangeList"),
       tempoValue: $("tempoValue"), weightHint: $("weightHint")
     };
     const GENRE_GROUPS = {
@@ -441,7 +446,7 @@
     };
     const state = {
       voicing: "original", octave: 0, playback: "chord",
-      arpPattern: "up", arpRate: 8, arpRange: 1, tempo: 120, noteWeights: []
+      arpFeel: "straight", arpPattern: "up", arpRate: 8, arpRange: 1, tempo: 120, noteWeights: []
     };
     const VOICINGS = [
       ["original", "Original", ""],
@@ -454,6 +459,10 @@
     ];
     const OCTAVES = [["-1", "−1"], ["0", "0"], ["1", "+1"]];
     const PLAYBACK_MODES = [["chord", "Chord"], ["arp", "Arp"]];
+    const ARP_FEELS = [
+      ["straight", "Straight"], ["pulse", "Pulse"], ["legato", "Legato"],
+      ["sparse", "Sparse"], ["cascading", "Cascading"]
+    ];
     const ARP_PATTERNS = [["up", "↑"], ["down", "↓"], ["updown", "↕"], ["random", "∿"]];
     const ARP_RATES = [[4, "¼"], [8, "⅛"], [16, "¹⁄₁₆"]];
     const ARP_RANGES = [[1, "1 oct"], [2, "2 oct"]];
@@ -642,7 +651,7 @@
         row.setAttribute("aria-pressed", Boolean(isSelected && activeVoice));
         const octaveLabel = state.octave > 0 ? `+${state.octave}` : state.octave;
         const playbackLabel = state.playback === "arp"
-          ? `${state.arpPattern} arp · ${state.tempo} bpm · 1/${state.arpRate}`
+          ? `${state.arpFeel} ${state.arpPattern} arp · ${state.tempo} bpm · 1/${state.arpRate}`
           : "sustained chord";
         const tapeUnit = `${midiNotes().map(midiName).join(" — ")} · ${state.voicing} · octave ${octaveLabel} · ${els.waveform.value} · ${playbackLabel} — `;
         const tapeText = isSelected
@@ -725,6 +734,14 @@
         if (wasPlaying) start();
       });
       els.arpControls.hidden = state.playback !== "arp";
+      fillRadioGroup(els.feelList, ARP_FEELS, state.arpFeel, feel => {
+        const wasPlaying = Boolean(activeVoice);
+        if (wasPlaying) stop(false);
+        state.arpFeel = feel;
+        renderControls();
+        update();
+        if (wasPlaying) start();
+      });
       fillRadioGroup(els.patternList, ARP_PATTERNS, state.arpPattern, pattern => {
         const wasPlaying = Boolean(activeVoice);
         if (wasPlaying) stop(false);
@@ -866,6 +883,32 @@
       return WEIGHT_GATES[state.noteWeights[event.weightIndex] || "normal"];
     }
 
+    function performanceForStep(step, event, previousNote) {
+      const baseGate = gateForEvent(event);
+      const performance = { note: event.note, gate: baseGate, level: .42, rest: false };
+      if (state.arpFeel === "pulse") {
+        const accented = step % 2 === 0;
+        performance.gate = baseGate * (accented ? 1 : .65);
+        performance.level = accented ? .5 : .28;
+      }
+      if (state.arpFeel === "legato") {
+        performance.gate = Math.min(1.1, baseGate * 1.5);
+        performance.level = .36;
+      }
+      if (state.arpFeel === "sparse") {
+        performance.rest = step % 4 === 2;
+        performance.gate = Math.min(1, baseGate * 1.2);
+        performance.level = step % 4 === 0 ? .48 : .32;
+      }
+      if (state.arpFeel === "cascading") {
+        if (step % 4 === 3 && performance.note <= 115) performance.note += 12;
+        const descending = previousNote !== null && performance.note < previousNote;
+        performance.gate = Math.min(1, baseGate * (descending ? 1.35 : .9));
+        performance.level = descending ? .46 : .34;
+      }
+      return performance;
+    }
+
     /* ---------- audio engine (reference implementation, unchanged behavior) ---------- */
     function oscillatorLayers() {
       if (els.waveform.value === "harmonic") {
@@ -915,13 +958,13 @@
       });
     }
 
-    function scheduleArpVoice(context, destination, midi, start, duration, collection) {
+    function scheduleArpVoice(context, destination, midi, start, duration, level = .42, collection) {
       const envelope = context.createGain();
       const attack = Math.min(.008, duration * .2);
       const release = Math.min(.04, duration * .25);
       envelope.gain.setValueAtTime(.0001, start);
-      envelope.gain.exponentialRampToValueAtTime(.42, start + attack);
-      envelope.gain.setValueAtTime(.42, Math.max(start + attack, start + duration - release));
+      envelope.gain.exponentialRampToValueAtTime(level, start + attack);
+      envelope.gain.setValueAtTime(level, Math.max(start + attack, start + duration - release));
       envelope.gain.exponentialRampToValueAtTime(.0001, start + duration);
       envelope.connect(destination);
       const oscillators = createVoice(context, envelope, midi, start);
@@ -938,9 +981,17 @@
     function buildArp(context, destination, duration) {
       const stepDuration = arpStepDuration();
       let step = 0;
+      let previousNote = null;
       for (let time = .02; time < duration - .02; time += stepDuration) {
-        const event = arpEventAt(step++);
-        scheduleArpVoice(context, destination, event.note, time, stepDuration * gateForEvent(event));
+        const event = arpEventAt(step);
+        const performance = performanceForStep(step++, event, previousNote);
+        if (!performance.rest) {
+          scheduleArpVoice(
+            context, destination, performance.note, time,
+            stepDuration * performance.gate, performance.level
+          );
+          previousNote = performance.note;
+        }
       }
     }
 
@@ -972,7 +1023,8 @@
         nextTime: liveContext.currentTime + .02,
         step: 0,
         timer: null,
-        oscillators: new Set()
+        oscillators: new Set(),
+        previousNote: null
       };
       activeVoice = session;
 
@@ -980,15 +1032,20 @@
         if (activeVoice !== session) return;
         const stepDuration = arpStepDuration();
         while (session.nextTime < liveContext.currentTime + .1) {
-          const event = arpEventAt(session.step++);
-          scheduleArpVoice(
-            liveContext,
-            liveContext.destination,
-            event.note,
-            session.nextTime,
-            stepDuration * gateForEvent(event),
-            session.oscillators
-          );
+          const event = arpEventAt(session.step);
+          const performance = performanceForStep(session.step++, event, session.previousNote);
+          if (!performance.rest) {
+            scheduleArpVoice(
+              liveContext,
+              liveContext.destination,
+              performance.note,
+              session.nextTime,
+              stepDuration * performance.gate,
+              performance.level,
+              session.oscillators
+            );
+            session.previousNote = performance.note;
+          }
           session.nextTime += stepDuration;
         }
         session.timer = setTimeout(schedule, 25);
@@ -1061,7 +1118,7 @@
         const safeName = currentChord().name.replaceAll("/", "-").replaceAll("#", "sharp");
         link.href = url;
         const modeSuffix = state.playback === "arp"
-          ? `${state.arpPattern}-arp-${state.tempo}bpm`
+          ? `${state.arpFeel}-${state.arpPattern}-arp-${state.tempo}bpm`
           : state.voicing;
         link.download = `${safeName}-${modeSuffix}.wav`;
         link.click();
