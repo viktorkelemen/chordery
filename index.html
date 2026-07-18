@@ -97,6 +97,20 @@
       font-size: 11px;
       letter-spacing: .04em;
     }
+    .explore-modes {
+      display: flex;
+      gap: 18px;
+      margin-top: 18px;
+      border-bottom: 1px solid #00000055;
+      padding-bottom: 7px;
+      font-size: 10px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .explore-modes button { color: #00000088; }
+    .explore-modes button:hover { color: var(--paper); }
+    .explore-modes button.on { color: var(--acid); font-weight: 800; }
+    .explore-modes button.on::before { content: "● "; }
     .setline {
       display: flex;
       align-items: baseline;
@@ -136,6 +150,39 @@
     .genre-index button { border-bottom: 1px solid transparent; }
     .genre-index button:hover, .genre-index button.on { color: var(--acid); border-color: currentColor; }
     #randomSet { margin-left: auto; font-weight: 800; }
+    .finder {
+      margin: 18px 0 12px;
+      border-top: 4px solid var(--paper);
+      border-bottom: 1px solid #00000055;
+      padding: 14px 0 18px;
+    }
+    .finder[hidden] { display: none; }
+    .finder-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+    .finder-head h2 { margin: 0; font: italic 400 clamp(22px, 3vw, 34px)/1 var(--serif); }
+    .finder-head p { margin: 0; color: #00000088; font-size: 10px; }
+    .note-picker { display: grid; grid-template-columns: repeat(12, minmax(34px, 1fr)); border: 1px solid var(--paper); }
+    .note-picker button {
+      min-height: 52px;
+      border-right: 1px solid #00000055;
+      font: 700 12px/1 var(--serif);
+    }
+    .note-picker button:last-child { border-right: 0; }
+    .note-picker button:hover { background: #00000010; }
+    .note-picker button.on { background: var(--acid); color: var(--ink); }
+    .finder-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 18px; }
+    .finder-group h3 { margin: 0 0 8px; font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: #00000080; }
+    .finder-result { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; border-top: 1px solid #00000044; padding: 7px 0; }
+    .finder-result strong { font: 700 18px/1 var(--serif); }
+    .finder-result small { grid-column: 1 / -1; color: #00000088; }
+    .finder-result button { color: var(--acid); font: 800 9px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .finder-result button:hover { color: var(--paper); }
+    .finder-empty { grid-column: 1 / -1; margin: 0; font: italic 18px/1.4 var(--serif); color: #00000088; }
 
     /* ── the specimen sheet ── */
     .sheet {
@@ -277,6 +324,7 @@
       text-transform: uppercase;
     }
     .inline-list { display: flex; gap: 16px; }
+    .finder-no-match { margin: 0; font: italic 13px/1.35 var(--serif); color: #00000080; }
     .arp-controls {
       display: grid;
       gap: 18px;
@@ -364,6 +412,9 @@
       .rows { margin-bottom: 40vh; }
       .row .name { white-space: normal; }
       .genre-index { gap: 7px 12px; }
+      .note-picker { grid-template-columns: repeat(6, 1fr); }
+      .note-picker button { min-height: 42px; border-bottom: 1px solid #00000055; }
+      .finder-results { grid-template-columns: 1fr; }
       #randomSet { margin-left: 0; }
       .colophon { margin-bottom: 42vh; grid-template-columns: 1fr auto; }
       .colophon span:last-child { display: none; }
@@ -379,18 +430,32 @@
     <div class="edition-line"><span>Harmonic specimens for the modern ear</span><span>Vol. I · A working chord database</span></div>
     <h1>Chord<span class="thin">ery</span></h1>
     <p class="site-description">Explore and audition curated chord progressions across pop, jazz, electronic, cinematic, soul, classical, and modern music. Shape alternate voicings and arpeggios, then export your ideas as WAV files—entirely in your browser.</p>
-    <div class="setline">
-      <span class="no" id="setNo">001</span>
-      <select id="setSelect" aria-label="Chord collection"></select>
-      <span class="arrows">
-        <button id="prevSet" aria-label="Previous collection">←</button>
-        <button id="nextSet" aria-label="Next collection">→</button>
-      </span>
+    <div class="explore-modes" role="radiogroup" aria-label="Explore mode">
+      <button class="on" id="collectionsMode" role="radio" aria-checked="true">Collections</button>
+      <button id="finderMode" role="radio" aria-checked="false">Find by notes</button>
     </div>
-    <nav id="genreIndex" class="genre-index" aria-label="Collection index"></nav>
+    <div id="collectionExplorer">
+      <div class="setline">
+        <span class="no" id="setNo">001</span>
+        <select id="setSelect" aria-label="Chord collection"></select>
+        <span class="arrows">
+          <button id="prevSet" aria-label="Previous collection">←</button>
+          <button id="nextSet" aria-label="Next collection">→</button>
+        </span>
+      </div>
+      <nav id="genreIndex" class="genre-index" aria-label="Collection index"></nav>
+    </div>
+    <section class="finder" id="noteFinder" hidden>
+      <div class="finder-head">
+        <h2>What chord is this?</h2>
+        <p>Select pitch classes · octave does not matter</p>
+      </div>
+      <div class="note-picker" id="notePicker" aria-label="Select notes"></div>
+      <div class="finder-results" id="finderResults" aria-live="polite"></div>
+    </section>
   </header>
 
-  <main class="sheet">
+  <main class="sheet" id="mainSheet">
     <div id="rows" class="rows" aria-label="Chords in this collection"></div>
 
     <aside class="margin">
@@ -475,7 +540,9 @@
       voicingList: $("voicingList"), octList: $("octList"), waveform: $("waveform"),
       genreIndex: $("genreIndex"), playbackList: $("playbackList"), arpControls: $("arpControls"),
       feelList: $("feelList"), patternList: $("patternList"), rateList: $("rateList"), rangeList: $("rangeList"),
-      tempoValue: $("tempoValue"), weightHint: $("weightHint")
+      tempoValue: $("tempoValue"), weightHint: $("weightHint"),
+      noteFinder: $("noteFinder"), notePicker: $("notePicker"), finderResults: $("finderResults"),
+      collectionExplorer: $("collectionExplorer"), mainSheet: $("mainSheet")
     };
     const GENRE_GROUPS = {
       All: () => true,
@@ -489,7 +556,8 @@
     };
     const state = {
       voicing: "original", octave: 0, playback: "chord",
-      arpFeel: "straight", arpPattern: "up", arpRate: 8, arpRange: 1, tempo: 120, noteWeights: []
+      arpFeel: "straight", arpPattern: "up", arpRate: 8, arpRange: 1, tempo: 120, noteWeights: [],
+      finderNotes: [], exploreMode: "collections"
     };
     const VOICINGS = [
       ["original", "Original", ""],
@@ -502,6 +570,7 @@
     ];
     const OCTAVES = [["-1", "−1"], ["0", "0"], ["1", "+1"]];
     const PLAYBACK_MODES = [["chord", "Chord"], ["arp", "Arp"]];
+    const FINDER_NOTES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
     const ARP_FEELS = [
       ["straight", "Straight"], ["pulse", "Pulse"], ["legato", "Legato"],
       ["sparse", "Sparse"], ["cascading", "Cascading"]
@@ -515,6 +584,7 @@
     let selectedChord = 0;
     let liveContext;
     let activeVoice = null;
+    let finderVoice = null;
     let activeGenreGroup = "All";
 
     CHORD_SETS.forEach(set => {
@@ -680,6 +750,158 @@
       const current = state.noteWeights[index] || "normal";
       state.noteWeights[index] = WEIGHT_LEVELS[(WEIGHT_LEVELS.indexOf(current) + 1) % WEIGHT_LEVELS.length];
       updateReadout();
+    }
+
+    function chordPitchClasses(chord) {
+      return [...new Set(chord.notes.map(note => ((noteToMidi(note) % 12) + 12) % 12))].sort((a, b) => a - b);
+    }
+
+    function samePitchClasses(a, b) {
+      return a.length === b.length && a.every((note, index) => note === b[index]);
+    }
+
+    function finderCandidates() {
+      const unique = new Map();
+      CHORD_SETS.forEach(set => set.chords.forEach((chord, chordIndex) => {
+        if (!chord.name) return;
+        const pitchClasses = chordPitchClasses(chord);
+        const key = `${chord.name}|${pitchClasses.join(",")}`;
+        if (!unique.has(key)) unique.set(key, { chord, set, chordIndex, pitchClasses });
+      }));
+      return [...unique.values()];
+    }
+
+    function renderNoteFinder() {
+      els.notePicker.replaceChildren();
+      FINDER_NOTES.forEach((label, pitchClass) => {
+        const button = document.createElement("button");
+        const selected = state.finderNotes.includes(pitchClass);
+        button.className = selected ? "on" : "";
+        button.textContent = label;
+        button.setAttribute("aria-pressed", selected);
+        button.addEventListener("click", () => {
+          stopFinderChord();
+          state.finderNotes = selected
+            ? state.finderNotes.filter(note => note !== pitchClass)
+            : [...state.finderNotes, pitchClass].sort((a, b) => a - b);
+          renderNoteFinder();
+        });
+        els.notePicker.append(button);
+      });
+
+      els.finderResults.replaceChildren();
+      if (!state.finderNotes.length) {
+        const empty = document.createElement("p");
+        empty.className = "finder-empty";
+        empty.textContent = "Choose two or more notes to reveal exact chords, larger voicings, and nearby interpretations.";
+        els.finderResults.append(empty);
+        return;
+      }
+
+      const selected = state.finderNotes;
+      const candidates = finderCandidates();
+      const exact = candidates.filter(item => samePitchClasses(item.pitchClasses, selected));
+      const contains = candidates
+        .filter(item => !samePitchClasses(item.pitchClasses, selected) && selected.every(note => item.pitchClasses.includes(note)))
+        .sort((a, b) => a.pitchClasses.length - b.pitchClasses.length || a.chord.name.length - b.chord.name.length);
+      const nearby = candidates
+        .filter(item => {
+          const overlap = selected.filter(note => item.pitchClasses.includes(note)).length;
+          return overlap >= Math.max(2, selected.length - 1) && !selected.every(note => item.pitchClasses.includes(note));
+        })
+        .sort((a, b) => {
+          const distance = item => selected.filter(note => !item.pitchClasses.includes(note)).length + item.pitchClasses.filter(note => !selected.includes(note)).length;
+          return distance(a) - distance(b) || a.chord.name.length - b.chord.name.length;
+        });
+
+      const groups = [["Exact", exact], ["Contains your notes", contains], ["Nearby", nearby]];
+      groups.forEach(([label, results]) => {
+        const group = document.createElement("section");
+        group.className = "finder-group";
+        const heading = document.createElement("h3");
+        heading.textContent = label;
+        group.append(heading);
+        if (!results.length) {
+          const empty = document.createElement("p");
+          empty.className = "finder-no-match";
+          empty.textContent = "No matches yet";
+          group.append(empty);
+        }
+        results.slice(0, 6).forEach(({ chord, pitchClasses }) => {
+          const result = document.createElement("div");
+          result.className = "finder-result";
+          const relationship = samePitchClasses(pitchClasses, selected)
+            ? "same notes"
+            : `${pitchClasses.filter(note => !selected.includes(note)).length} added`;
+          result.innerHTML = `<strong>${chord.name}</strong><button type="button" aria-label="Play ${chord.name}">Play ⏵</button><small>${relationship} · ${pitchClasses.map(note => FINDER_NOTES[note]).join(" · ")}</small>`;
+          result.querySelector("button").addEventListener("click", event => playFinderChord(chord, event.currentTarget));
+          group.append(result);
+        });
+        els.finderResults.append(group);
+      });
+    }
+
+    function setExploreMode(mode) {
+      stopFinderChord();
+      state.exploreMode = mode;
+      const finding = mode === "finder";
+      els.collectionExplorer.hidden = finding;
+      els.mainSheet.hidden = finding;
+      els.noteFinder.hidden = !finding;
+      $("collectionsMode").classList.toggle("on", !finding);
+      $("collectionsMode").setAttribute("aria-checked", !finding);
+      $("finderMode").classList.toggle("on", finding);
+      $("finderMode").setAttribute("aria-checked", finding);
+      if (finding) renderNoteFinder();
+    }
+
+    function stopFinderChord() {
+      if (!finderVoice || !liveContext) return;
+      const voice = finderVoice;
+      finderVoice = null;
+      clearTimeout(voice.timer);
+      const now = liveContext.currentTime;
+      voice.master.gain.cancelScheduledValues(now);
+      voice.master.gain.setValueAtTime(Math.max(.0001, voice.master.gain.value), now);
+      voice.master.gain.exponentialRampToValueAtTime(.0001, now + .06);
+      voice.oscillators.forEach(oscillator => {
+        try { oscillator.stop(now + .065); } catch {}
+      });
+      if (voice.button.isConnected) voice.button.textContent = "Play ⏵";
+    }
+
+    async function playFinderChord(chord, button) {
+      const chordKey = `${chord.name}|${chord.notes.join(",")}`;
+      if (finderVoice?.key === chordKey) {
+        stopFinderChord();
+        return;
+      }
+      stopFinderChord();
+      liveContext ||= new AudioContext();
+      await liveContext.resume();
+      const now = liveContext.currentTime;
+      const duration = 2.4;
+      const notes = chord.notes.map(noteToMidi);
+      const master = liveContext.createGain();
+      const oscillators = [];
+      master.gain.setValueAtTime(.0001, now);
+      master.gain.exponentialRampToValueAtTime(.72 / notes.length, now + .025);
+      master.gain.setValueAtTime(.72 / notes.length, now + duration - .12);
+      master.gain.exponentialRampToValueAtTime(.0001, now + duration);
+      master.connect(liveContext.destination);
+      notes.forEach(midi => {
+        const voices = createVoice(liveContext, master, midi, now);
+        voices.forEach(oscillator => oscillator.stop(now + duration + .01));
+        oscillators.push(...voices);
+      });
+      button.textContent = "Stop ■";
+      const voice = { key: chordKey, master, oscillators, button, timer: null };
+      voice.timer = setTimeout(() => {
+        if (finderVoice !== voice) return;
+        finderVoice = null;
+        if (button.isConnected) button.textContent = "Play ⏵";
+      }, duration * 1000 + 30);
+      finderVoice = voice;
     }
 
     /* ---------- typographic rendering ---------- */
@@ -1200,6 +1422,8 @@
       activeGenreGroup = "All";
       selectSet(els.set.selectedIndex);
     });
+    $("collectionsMode").addEventListener("click", () => setExploreMode("collections"));
+    $("finderMode").addEventListener("click", () => setExploreMode("finder"));
     $("prevSet").addEventListener("click", () => {
       activeGenreGroup = "All";
       selectSet(els.set.selectedIndex - 1);
