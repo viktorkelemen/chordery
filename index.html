@@ -3,7 +3,43 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chordery — Specimen</title>
+  <title>Chordery — Interactive Chord Progression Explorer</title>
+  <meta name="description" content="Explore, audition, reharmonize, and export curated chord progressions for pop, jazz, electronic, cinematic, soul, classical, and modern music.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://chordery.com/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Chordery">
+  <meta property="og:title" content="Chordery — Interactive Chord Progression Explorer">
+  <meta property="og:description" content="Play curated chord progressions, explore alternate voicings and arpeggios, and export your ideas as WAV files.">
+  <meta property="og:url" content="https://chordery.com/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Chordery — Interactive Chord Progression Explorer">
+  <meta name="twitter:description" content="Play curated chord progressions, explore alternate voicings and arpeggios, and export your ideas as WAV files.">
+  <meta name="theme-color" content="#eee2ca">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Chordery",
+    "url": "https://chordery.com/",
+    "description": "An interactive browser-based chord progression explorer with playable chord sets, alternate voicings, arpeggios, octave controls, and local WAV export.",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires a modern web browser with Web Audio API support",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Curated chord progressions",
+      "Interactive chord playback",
+      "Alternate voicings and inversions",
+      "Configurable arpeggios",
+      "Local WAV export"
+    ]
+  }
+  </script>
   <style>
     :root {
       --blue: #eee2ca;   /* warm newsprint field */
@@ -55,6 +91,12 @@
       text-transform: uppercase;
     }
     h1 .thin { font-weight: 400; font-style: italic; letter-spacing: -.02em; }
+    .site-description {
+      max-width: 72ch;
+      margin: 16px 0 0;
+      font-size: 11px;
+      letter-spacing: .04em;
+    }
     .setline {
       display: flex;
       align-items: baseline;
@@ -336,6 +378,7 @@
   <header class="masthead">
     <div class="edition-line"><span>Harmonic specimens for the modern ear</span><span>Vol. I · A working chord database</span></div>
     <h1>Chord<span class="thin">ery</span></h1>
+    <p class="site-description">Explore and audition curated chord progressions across pop, jazz, electronic, cinematic, soul, classical, and modern music. Shape alternate voicings and arpeggios, then export your ideas as WAV files—entirely in your browser.</p>
     <div class="setline">
       <span class="no" id="setNo">001</span>
       <select id="setSelect" aria-label="Chord collection"></select>
@@ -1208,5 +1251,8 @@
     replayEntrance();
     update();
   </script>
+  <!-- Cloudflare Web Analytics -->
+  <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"ee49a944cb69473996314e989d5a6179"}'></script>
+  <!-- End Cloudflare Web Analytics -->
 </body>
 </html>

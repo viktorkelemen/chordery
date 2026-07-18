@@ -1,0 +1,9 @@
+# Chordery
+
+> Chordery is a free, browser-based chord progression explorer for musicians, producers, and composers.
+
+Canonical URL: https://chordery.com/
+
+Chordery provides curated chord sets for pop, jazz, electronic, cinematic, soul, classical, and modern music. Visitors can audition progressions, transpose through keys, explore inversions and alternate voicings, configure arpeggios, change octave and waveform settings, and export audio locally as WAV files.
+
+The application runs entirely in the browser and does not require an account.
